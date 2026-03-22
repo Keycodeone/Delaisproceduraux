@@ -176,7 +176,6 @@ const elAjustJours  = document.getElementById('ajust-jours');
 const elRemarques   = document.getElementById('remarques');
 const elCharCounter = document.getElementById('char-counter');
 const elBtnCalc     = document.getElementById('btn-calculer');
-const elInstall     = document.getElementById('btn-install');
 const elModal       = document.getElementById('modal-overlay');
 const elModalClose  = document.getElementById('btn-modal-close');
 const elModalDead   = document.getElementById('modal-title');
@@ -191,12 +190,6 @@ const elResRemVal   = document.getElementById('res-remarques-val');
 const elBtnCal      = document.getElementById('btn-calendrier');
 const elBtnPdf      = document.getElementById('btn-pdf');
 const elToast       = document.getElementById('toast');
-
-/* ─── ÉTAT INTERNE ─── */
-let currentDeadline = null;
-let currentData     = {};
-let ajustSign       = +1;  // +1 ou -1
-let deferredInstall = null;
 
 /* ─── INITIALISATION ─── */
 document.addEventListener('DOMContentLoaded', () => {
@@ -558,29 +551,6 @@ function showToast(msg, duration = 2500) {
     setTimeout(() => { elToast.hidden = true; }, 350);
   }, duration);
 }
-
-/* ─── PWA INSTALL ─── */
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredInstall = e;
-  elInstall.hidden = false;
-});
-
-elInstall.addEventListener('click', async () => {
-  if (!deferredInstall) return;
-  deferredInstall.prompt();
-  const { outcome } = await deferredInstall.userChoice;
-  if (outcome === 'accepted') {
-    elInstall.hidden = true;
-    showToast('Application installée !');
-  }
-  deferredInstall = null;
-});
-
-window.addEventListener('appinstalled', () => {
-  elInstall.hidden = true;
-  deferredInstall = null;
-});
 
 /* ─── SERVICE WORKER ─── */
 if ('serviceWorker' in navigator) {
