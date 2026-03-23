@@ -3,137 +3,150 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="Calculateur de délais procéduraux pour avocats — rapide, fiable, offline." />
-  <meta name="theme-color" content="#120D2E" />
+  <meta name="description" content="Calculateur de délais procéduraux pour avocats — jours fériés français intégrés, export calendrier et PDF." />
+  <meta name="theme-color" content="#4B2E9A" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Délais" />
+  <meta name="apple-mobile-web-app-title" content="Délais proc." />
+
+  <title>Délais procéduraux</title>
+
   <link rel="manifest" href="webmanifest.json" />
   <link rel="apple-touch-icon" href="icons/icon_192px.png" />
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon_192px.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <title>Délais procéduraux</title>
 </head>
 <body>
-  <div class="app-shell">
+  <!-- ===== En-tête ===== -->
+  <header class="app-header">
+    <img src="icons/balance_50px.png" alt="" class="header-icon" aria-hidden="true" />
+    <h1>Délais procéduraux</h1>
+    <img src="icons/balance_50px.png" alt="" class="header-icon" aria-hidden="true" />
+  </header>
 
-    <!-- HEADER -->
-    <header class="app-header">
-      <img src="icons/balance_50px.png" alt="" class="header-icon" width="32" height="32" />
-      <div class="header-text">
-        <h1 class="app-title">Délais procéduraux</h1>
+  <!-- ===== Formulaire principal ===== -->
+  <main class="main-content">
+    <form id="delaisForm" novalidate>
+
+      <!-- Type d'acte -->
+      <div class="form-group">
+        <label for="typeActe"><strong>Type d'acte</strong></label>
+        <select id="typeActe" name="typeActe" required aria-required="true">
+          <option value="" disabled selected>— Sélectionner un type —</option>
+          <option value="10">Formation d'Opposition (10 j)</option>
+          <option value="15">Réponse à Assignation (15 j)</option>
+          <option value="60_contestation">Contestation de Décision (60 j)</option>
+          <option value="10_appel">Interjeter un Appel (10 j)</option>
+          <option value="60_cassation">Pourvoi en Cassation (60 j)</option>
+          <option value="60_admin">Recours Administratif (60 j)</option>
+          <option value="90">Dépôt de Conclusions (90 j)</option>
+          <option value="autre">Autre (durée libre)</option>
+        </select>
+        <span class="field-error" id="typeActeError" role="alert" aria-live="polite"></span>
       </div>
-      <img src="icons/balance_50px.png" alt="" class="header-icon" width="32" height="32" />
-    </header>
 
-    <!-- FORM -->
-    <main class="form-wrapper">
-      <form id="delaiForm" novalidate>
+      <!-- Durée libre (Autre) -->
+      <div class="form-group form-group--conditional" id="autreGroup" aria-hidden="true">
+        <label for="autreJours"><strong>Nombre de jours</strong></label>
+        <input
+          type="number"
+          id="autreJours"
+          name="autreJours"
+          min="1"
+          max="3650"
+          placeholder="Ex : 45"
+          aria-describedby="autreJoursError"
+        />
+        <span class="field-error" id="autreJoursError" role="alert" aria-live="polite"></span>
+      </div>
 
-        <!-- TYPE D'ACTE -->
-        <div class="field-group">
-          <label class="field-label" for="typeActe">Type d'acte</label>
-          <div class="select-wrapper">
-            <select id="typeActe" name="typeActe" required>
-              <option value="" disabled selected>Sélectionner…</option>
-              <option value="10">Formation d'Opposition (10 jours)</option>
-              <option value="15">Réponse à Assignation (15 jours)</option>
-              <option value="60_contestation">Contestation de Décision (60 jours)</option>
-              <option value="30">Interjeter un Appel (10 jours)</option>
-              <option value="60_cassation">Pourvoi en Cassation (60 jours)</option>
-              <option value="60_admin">Recours Administratif (60 jours)</option>
-              <option value="90">Dépôt de Conclusions (90 jours)</option>
-              <option value="autre">Autre (saisir la durée ci-dessous)</option>
+      <!-- Date de notification -->
+      <div class="form-group">
+        <label for="dateNotif"><strong>Date de notification</strong></label>
+        <input
+          type="date"
+          id="dateNotif"
+          name="dateNotif"
+          required
+          aria-required="true"
+          aria-describedby="dateNotifError"
+        />
+        <span class="field-error" id="dateNotifError" role="alert" aria-live="polite"></span>
+      </div>
+
+      <!-- Ajustement -->
+      <div class="form-group">
+        <div class="checkbox-row">
+          <input type="checkbox" id="ajustCheck" name="ajustCheck" />
+          <label for="ajustCheck">Augmentation ou diminution du délai</label>
+        </div>
+        <div class="form-group--conditional" id="ajustGroup" aria-hidden="true">
+          <label for="ajustJours" class="sr-only"><strong>Ajustement en jours</strong></label>
+          <div class="signed-input-wrap">
+            <select id="ajustSigne" name="ajustSigne" aria-label="Signe de l'ajustement">
+              <option value="+">+</option>
+              <option value="-">−</option>
             </select>
-            <span class="select-arrow">&#8964;</span>
+            <input
+              type="number"
+              id="ajustJours"
+              name="ajustJours"
+              min="1"
+              max="3650"
+              placeholder="Nb de jours"
+              aria-describedby="ajustError"
+            />
           </div>
-          <div class="subfield" id="dureeAutreWrapper" hidden>
-            <input type="number" id="dureeAutre" name="dureeAutre" min="1" max="3650"
-              placeholder="Nombre de jours" class="input-field" />
-          </div>
+          <span class="field-error" id="ajustError" role="alert" aria-live="polite"></span>
         </div>
-
-        <!-- DATE DE NOTIFICATION -->
-        <div class="field-group">
-          <label class="field-label" for="dateNotif">Date de notification</label>
-          <input type="date" id="dateNotif" name="dateNotif" required class="input-field date-field" />
-        </div>
-
-        <!-- AJUSTEMENT -->
-        <div class="field-group">
-          <label class="field-label adjust-label">
-            <span class="checkbox-wrapper">
-              <input type="checkbox" id="adjustCheck" name="adjustCheck" />
-              <span class="custom-checkbox"></span>
-            </span>
-            Augmentation ou Diminution du délai
-          </label>
-          <div class="subfield adjust-field" id="adjustWrapper" hidden>
-            <div class="signed-input">
-              <button type="button" class="sign-btn" id="signBtn" data-sign="+" aria-label="Changer le signe">+</button>
-              <input type="number" id="adjustDays" name="adjustDays" min="1" max="3650"
-                placeholder="Jours" class="input-field" />
-            </div>
-            <span class="adjust-hint">jours calendaires</span>
-          </div>
-        </div>
-
-        <!-- REMARQUES -->
-        <div class="field-group">
-          <label class="field-label" for="remarques">
-            Remarques éventuelles
-            <span class="char-counter" id="charCounter">0/30</span>
-          </label>
-          <textarea id="remarques" name="remarques" maxlength="30"
-            placeholder="Référence dossier, notes…" class="input-field textarea-field" rows="2"></textarea>
-        </div>
-
-        <!-- SUBMIT -->
-        <button type="submit" class="btn-calculer" id="btnCalculer">
-          <span class="btn-text">Calculer</span>
-          <span class="btn-shimmer"></span>
-        </button>
-
-      </form>
-
-      <!-- VALIDATION MESSAGES -->
-      <div class="error-msg" id="errorMsg" hidden role="alert"></div>
-    </main>
-
-  </div><!-- /.app-shell -->
-
-  <!-- MODAL RÉSULTATS -->
-  <div class="modal-overlay" id="modalOverlay" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitle">
-    <div class="modal-card">
-      <button class="modal-close" id="modalClose" aria-label="Fermer">&#x2715;</button>
-
-      <div class="modal-header">
-        <p class="modal-eyebrow">Date limite calculée</p>
-        <p class="modal-date" id="resultDate">—</p>
-        <p class="modal-dayname" id="resultDayName">—</p>
       </div>
 
-      <div class="modal-body">
-        <dl class="result-list" id="resultList"></dl>
+      <!-- Remarques -->
+      <div class="form-group">
+        <label for="remarques"><strong>Remarques</strong></label>
+        <textarea
+          id="remarques"
+          name="remarques"
+          maxlength="30"
+          rows="2"
+          placeholder="Note optionnelle…"
+          aria-describedby="remarquesCount"
+        ></textarea>
+        <span class="char-counter" id="remarquesCount" aria-live="polite">0/30</span>
       </div>
+
+      <!-- Bouton calculer -->
+      <button type="submit" id="btnCalculer" class="btn-calculer">
+        <span class="btn-text">Calculer</span>
+        <span class="shimmer" aria-hidden="true"></span>
+      </button>
+
+    </form>
+  </main>
+
+  <!-- ===== Modal de résultats ===== -->
+  <div id="resultatModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+    <div class="modal-box">
+      <button class="modal-close" id="modalClose" aria-label="Fermer">&times;</button>
+      <h2 id="modalTitle" class="modal-title">Résultat</h2>
+
+      <dl class="result-list" id="resultList"></dl>
+
+      <p class="result-date-label">Date limite</p>
+      <p class="result-date" id="resultDate" aria-live="polite"></p>
 
       <div class="modal-actions">
-        <button class="btn-action btn-cal" id="btnCal">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          Calendrier
+        <button id="btnExportCal" class="btn-action btn-action--cal">
+          Exporter vers le calendrier
         </button>
-        <button class="btn-action btn-pdf" id="btnPdf">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <button id="btnExportPDF" class="btn-action btn-action--pdf">
           Télécharger PDF
         </button>
       </div>
     </div>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- jsPDF via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" crossorigin="anonymous"></script>
   <script src="app.js"></script>
 </body>
 </html>

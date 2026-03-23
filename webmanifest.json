@@ -1,15 +1,14 @@
 {
   "name": "Délais procéduraux",
-  "short_name": "Délais",
-  "description": "Calculateur de délais procéduraux pour avocats — rapide, fiable, offline.",
+  "short_name": "Délais proc.",
+  "description": "Calculateur de délais procéduraux pour avocats — jours fériés français, export calendrier et PDF.",
   "start_url": "./",
-  "scope": "./",
   "display": "standalone",
-  "orientation": "portrait-primary",
-  "theme_color": "#120D2E",
-  "background_color": "#0C0A1E",
-  "lang": "fr",
-  "categories": ["productivity", "business", "legal"],
+  "orientation": "portrait",
+  "theme_color": "#4B2E9A",
+  "background_color": "#EDE9FF",
+  "lang": "fr-FR",
+  "categories": ["productivity", "utilities"],
   "icons": [
     {
       "src": "icons/icon_192px.png",
@@ -23,7 +22,5 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ],
-  "screenshots": [],
-  "shortcuts": []
+  ]
 }
