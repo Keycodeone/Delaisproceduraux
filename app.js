@@ -1,566 +1,545 @@
-/* ===================================================
-   DÉLAIS PROCÉDURAUX — app.js
-   Logique : calcul délais, jours fériés FR, PDF, ICS
-   =================================================== */
-
+/* ─── app.js — Calculateur de délais procéduraux ─────────────────────────── */
 'use strict';
 
-/* ─── CONSTANTES ─── */
-const ACTES = {
-  'opposition:10':    { label: 'Formation d\'Opposition',    jours: 10 },
-  'assignation:15':   { label: 'Réponse à Assignation',     jours: 15 },
-  'contestation:60':  { label: 'Contestation de Décision',  jours: 60 },
-  'appel:30':         { label: 'Déclaration d\'Appel',       jours: 30 },
-  'cassation:60':     { label: 'Pourvoi en Cassation',       jours: 60 },
-  'administratif:60': { label: 'Recours Administratif',      jours: 60 },
-  'conclusions:90':   { label: 'Dépôt de Conclusions',       jours: 90 },
-  'autre:0':          { label: 'Autre',                      jours: 0  },
-};
-
-/* ─── JOURS FÉRIÉS MÉTROPOLITAINS ─── */
+// ═══════════════════════════════════════════════════════════════════════════
+// 1. JOURS FÉRIÉS
+// ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Algorithme de Meeus/Jones/Butcher — Pâques (calendrier grégorien)
+ * Calcule la date de Pâques (algorithme de Oudin / Tondering).
  * @param {number} year
- * @returns {Date} dimanche de Pâques
+ * @returns {Date}
  */
-function getEaster(year) {
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; // 0-indexed
-  const day   = ((h + l - 7 * m + 114) % 31) + 1;
-  return new Date(year, month, day);
+function easterDate(year) {
+  const f = Math.floor;
+  const G = year % 19;
+  const C = f(year / 100);
+  const H = (C - f(C / 4) - f((8 * C + 13) / 25) + 19 * G + 15) % 30;
+  const I = H - f(H / 28) * (1 - f(29 / (H + 1)) * f((21 - G) / 11));
+  const J = (year + f(year / 4) + I + 2 - C + f(C / 4)) % 7;
+  const L = I - J;
+  const month = 3 + f((L + 40) / 44); // 1-indexed
+  const day = L + 28 - 31 * f(month / 4);
+  return new Date(year, month - 1, day);
 }
 
 /**
- * Retourne les 11 jours fériés légaux français pour une année donnée.
- * Stockage en Set de chaînes 'YYYY-MM-DD' pour lookup O(1).
+ * Retourne l'ensemble des jours fériés français métropolitains pour une année.
+ * Format clé : "YYYY-MM-DD"
  * @param {number} year
  * @returns {Set<string>}
  */
-const _feriéCache = {};
-function getFeries(year) {
-  if (_feriéCache[year]) return _feriéCache[year];
+function getJoursFeries(year) {
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const d = (m, day) => new Date(year, m - 1, day);
+  const offset = (base, days) => { const r = new Date(base); r.setDate(r.getDate() + days); return r; };
 
-  const easter = getEaster(year);
-  const DAY = 24 * 3600 * 1000;
+  const paques = easterDate(year);
 
-  const dates = [
-    // Fêtes fixes
-    new Date(year, 0,  1),  // Jour de l'An
-    new Date(year, 4,  1),  // Fête du Travail
-    new Date(year, 4,  8),  // Victoire 1945
-    new Date(year, 6, 14),  // Fête Nationale
-    new Date(year, 7, 15),  // Assomption
-    new Date(year, 10,  1), // Toussaint
-    new Date(year, 10, 11), // Armistice
-    new Date(year, 11, 25), // Noël
-    // Fêtes mobiles (basées sur Pâques)
-    new Date(easter.getTime() +  1 * DAY),  // Lundi de Pâques
-    new Date(easter.getTime() + 39 * DAY),  // Ascension
-    new Date(easter.getTime() + 50 * DAY),  // Lundi de Pentecôte
-  ];
-
-  const set = new Set(dates.map(d => toISO(d)));
-  _feriéCache[year] = set;
-  return set;
+  return new Set([
+    fmt(d(1, 1)),    // Jour de l'an
+    fmt(offset(paques, 1)),  // Lundi de Pâques
+    fmt(d(5, 1)),    // Fête du Travail
+    fmt(d(5, 8)),    // Victoire 1945
+    fmt(offset(paques, 39)), // Ascension (J+39)
+    fmt(offset(paques, 50)), // Lundi de Pentecôte (J+50)
+    fmt(d(7, 14)),   // Fête nationale
+    fmt(d(8, 15)),   // Assomption
+    fmt(d(11, 1)),   // Toussaint
+    fmt(d(11, 11)),  // Armistice
+    fmt(d(12, 25)),  // Noël
+  ]);
 }
 
-/* ─── HELPERS DATE ─── */
+/** Vérifie si une Date est un week-end. */
+const isWeekend = d => d.getDay() === 0 || d.getDay() === 6;
 
-/** Formatte une Date en 'YYYY-MM-DD' (locale-safe) */
-function toISO(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
+/** Formatte une Date en "YYYY-MM-DD". */
+function toKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Parse une chaîne 'YYYY-MM-DD' en Date locale (sans décalage TZ) */
-function parseDate(str) {
-  const [y, m, d] = str.split('-').map(Number);
+/**
+ * Reporte une date au premier jour ouvré suivant si elle tombe
+ * un week-end ou un jour férié (art. 642 CPC).
+ */
+function reporterSiNecessaire(date) {
+  // On peut avoir besoin de jours fériés sur 2 ans max (si on est fin décembre)
+  const feN = getJoursFeries(date.getFullYear());
+  const feN1 = getJoursFeries(date.getFullYear() + 1);
+  const feries = new Set([...feN, ...feN1]);
+
+  let d = new Date(date);
+  while (isWeekend(d) || feries.has(toKey(d))) {
+    d.setDate(d.getDate() + 1);
+  }
+  return d;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 2. CALCUL PRINCIPAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Calcule la date limite.
+ * @param {Date} dateNotif   - Date de notification (J0)
+ * @param {number} delaiJours - Délai de base en jours calendaires
+ * @param {number} adjustJours - Ajustement signé en jours calendaires (peut être 0)
+ * @returns {Date}
+ */
+function calculerDateLimite(dateNotif, delaiJours, adjustJours = 0) {
+  // J0 + délai + ajustement (tous en jours calendaires)
+  const result = new Date(dateNotif);
+  result.setDate(result.getDate() + delaiJours + adjustJours);
+
+  // Report si week-end ou férié
+  return reporterSiNecessaire(result);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3. UTILITAIRES FORMAT
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MOIS = ['janvier','février','mars','avril','mai','juin',
+              'juillet','août','septembre','octobre','novembre','décembre'];
+const JOURS = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+
+/** Formate une Date en "15 mai 2026" */
+function formatDateLong(d) {
+  return `${d.getDate()} ${MOIS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+/** Formate une Date en "JJ/MM/AAAA" */
+function formatDateCourt(d) {
+  return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
+}
+
+/** Nom du jour */
+const nomJour = d => JOURS[d.getDay()].charAt(0).toUpperCase() + JOURS[d.getDay()].slice(1);
+
+/** Supprime les emojis d'une chaîne (pour le PDF) */
+function stripEmojis(str) {
+  return str.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{231A}-\u{231B}\u{23E9}-\u{23F3}\u{25AA}-\u{25FE}\u{2614}-\u{2615}\u{2648}-\u{2653}\u{267F}\u{2693}\u{26A1}\u{26AA}-\u{26AB}\u{26BD}-\u{26BE}\u{26C4}-\u{26C5}\u{26CE}\u{26D4}\u{26EA}\u{26F2}-\u{26F3}\u{26F5}\u{26FA}\u{26FD}\u{2702}\u{2705}\u{2708}-\u{270D}\u{270F}\u{2712}\u{2714}\u{2716}\u{271D}\u{2721}\u{2728}\u{2733}-\u{2734}\u{2744}\u{2747}\u{274C}\u{274E}\u{2753}-\u{2755}\u{2757}\u{2763}-\u{2764}\u{2795}-\u{2797}\u{27A1}\u{27B0}\u{27BF}\u{2934}-\u{2935}\u{2B05}-\u{2B07}\u{2B1B}-\u{2B1C}\u{2B50}\u{2B55}\u{3030}\u{303D}\u{3297}\u{3299}]/gu, '');
+}
+
+/** Lit la valeur de l'input date et retourne une Date locale (pas UTC) */
+function parseDateInput(val) {
+  const [y, m, d] = val.split('-').map(Number);
   return new Date(y, m - 1, d);
 }
 
-/** Vérifie si une date est un weekend */
-function isWeekend(d) {
-  const dow = d.getDay();
-  return dow === 0 || dow === 6; // 0=dim, 6=sam
+/** Formate une Date en "YYYYMMDD" (pour iCal) */
+function iCalDate(d) {
+  return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
 }
 
-/** Vérifie si une date est fériée */
-function isFerie(d) {
-  return getFeries(d.getFullYear()).has(toISO(d));
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// 4. ÉTAT APPLICATIF
+// ═══════════════════════════════════════════════════════════════════════════
 
-/** Vérifie si une date est non ouvrable (weekend ou férié) */
-function isNonOuvre(d) {
-  return isWeekend(d) || isFerie(d);
-}
+let lastResult = null; // { dateLimite, typeLabel, delaiJours, dateNotif, adjust, remarques }
 
-/**
- * Avance une date au prochain jour ouvré si elle tombe un non-ouvrable.
- * @param {Date} d
- * @returns {Date} nouveau Date (ne modifie pas l'original)
- */
-function prochainJourOuvre(d) {
-  const result = new Date(d);
-  while (isNonOuvre(result)) {
-    result.setDate(result.getDate() + 1);
-  }
-  return result;
-}
+// ═══════════════════════════════════════════════════════════════════════════
+// 5. DOM REFERENCES
+// ═══════════════════════════════════════════════════════════════════════════
 
-/* ─── CALCUL PRINCIPAL ─── */
+const form          = document.getElementById('delaiForm');
+const typeActe      = document.getElementById('typeActe');
+const dureeAutreWrap= document.getElementById('dureeAutreWrapper');
+const dureeAutreInp = document.getElementById('dureeAutre');
+const dateNotifInp  = document.getElementById('dateNotif');
+const adjustCheck   = document.getElementById('adjustCheck');
+const adjustWrapper = document.getElementById('adjustWrapper');
+const adjustDays    = document.getElementById('adjustDays');
+const signBtn       = document.getElementById('signBtn');
+const remarques     = document.getElementById('remarques');
+const charCounter   = document.getElementById('charCounter');
+const errorMsg      = document.getElementById('errorMsg');
+const btnCalculer   = document.getElementById('btnCalculer');
 
-/**
- * Calcule la date limite procédurale.
- * Les délais légaux et l'ajustement sont en jours CALENDAIRES.
- * Si la date résultante tombe un weekend/férié, report au prochain jour ouvré.
- *
- * @param {Date}   dateNotif  - date de notification
- * @param {number} delaiJours - délai légal en jours calendaires
- * @param {number} ajustJours - ajustement en jours calendaires (peut être négatif)
- * @returns {{ deadline: Date, adjustedWeekend: boolean }}
- */
-function calculerDelai(dateNotif, delaiJours, ajustJours) {
-  const rawDeadline = new Date(dateNotif);
-  rawDeadline.setDate(rawDeadline.getDate() + delaiJours + ajustJours);
+const modalOverlay  = document.getElementById('modalOverlay');
+const modalClose    = document.getElementById('modalClose');
+const resultDate    = document.getElementById('resultDate');
+const resultDayName = document.getElementById('resultDayName');
+const resultList    = document.getElementById('resultList');
+const btnCal        = document.getElementById('btnCal');
+const btnPdf        = document.getElementById('btnPdf');
 
-  const nonOuvre = isNonOuvre(rawDeadline);
-  const deadline = prochainJourOuvre(rawDeadline);
+// ═══════════════════════════════════════════════════════════════════════════
+// 6. INTERACTIONS FORMULAIRE
+// ═══════════════════════════════════════════════════════════════════════════
 
-  return { deadline, reportee: nonOuvre };
-}
-
-/* ─── FORMATAGE ─── */
-
-const JOURS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
-const MOIS  = ['janvier','février','mars','avril','mai','juin',
-                'juillet','août','septembre','octobre','novembre','décembre'];
-
-function formatDateFR(d) {
-  return `${JOURS[d.getDay()]} ${d.getDate()} ${MOIS[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-/** Nettoie les emojis et caractères spéciaux (pour PDF) */
-function stripEmojis(str) {
-  return (str || '')
-    .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
-    .replace(/[\u{2600}-\u{27BF}]/gu, '')
-    .replace(/[\uFE00-\uFE0F]/g, '')
-    .trim();
-}
-
-/* ─── DOM ELEMENTS ─── */
-
-const elTypeActe    = document.getElementById('type-acte');
-const elGroupAutre  = document.getElementById('group-autre');
-const elDureeAutre  = document.getElementById('duree-autre');
-const elDateNotif   = document.getElementById('date-notif');
-const elCbAjust     = document.getElementById('cb-ajust');
-const elAjustWrapper= document.getElementById('ajust-wrapper');
-const elBtnPlus     = document.getElementById('btn-sign-plus');
-const elBtnMinus    = document.getElementById('btn-sign-minus');
-const elAjustJours  = document.getElementById('ajust-jours');
-const elRemarques   = document.getElementById('remarques');
-const elCharCounter = document.getElementById('char-counter');
-const elBtnCalc     = document.getElementById('btn-calculer');
-const elModal       = document.getElementById('modal-overlay');
-const elModalClose  = document.getElementById('btn-modal-close');
-const elModalDead   = document.getElementById('modal-title');
-const elResType     = document.getElementById('res-type-val');
-const elResDureeSpec= document.getElementById('res-duree-spec');
-const elResDurVal   = document.getElementById('res-duree-spec-val');
-const elResNotif    = document.getElementById('res-notif-val');
-const elResAjust    = document.getElementById('res-ajust');
-const elResAjustVal = document.getElementById('res-ajust-val');
-const elResRem      = document.getElementById('res-remarques');
-const elResRemVal   = document.getElementById('res-remarques-val');
-const elBtnCal      = document.getElementById('btn-calendrier');
-const elBtnPdf      = document.getElementById('btn-pdf');
-const elToast       = document.getElementById('toast');
-
-/* ─── INITIALISATION ─── */
-document.addEventListener('DOMContentLoaded', () => {
-  // Date de notification : aujourd'hui par défaut
-  elDateNotif.value = toISO(new Date());
-  initEvents();
+// --- Type d'acte : afficher champ durée si "autre" ---
+typeActe.addEventListener('change', () => {
+  const isAutre = typeActe.value === 'autre';
+  dureeAutreWrap.hidden = !isAutre;
+  setTimeout(() => dureeAutreWrap.classList.toggle('visible', isAutre), 10);
+  if (!isAutre) dureeAutreInp.value = '';
+  clearError();
 });
 
-/* ─── EVENTS ─── */
-function initEvents() {
-
-  // Type d'acte → afficher/masquer champ "Autre"
-  elTypeActe.addEventListener('change', () => {
-    const isAutre = elTypeActe.value === 'autre:0';
-    elGroupAutre.hidden = !isAutre;
-    if (isAutre) elDureeAutre.focus();
+// --- Checkbox ajustement ---
+adjustCheck.addEventListener('change', () => {
+  const on = adjustCheck.checked;
+  adjustWrapper.hidden = false;
+  requestAnimationFrame(() => {
+    adjustWrapper.classList.toggle('visible', on);
   });
+  setTimeout(() => { if (!on) adjustWrapper.hidden = true; }, on ? 0 : 300);
+  if (!on) { adjustDays.value = ''; signBtn.dataset.sign = '+'; signBtn.textContent = '+'; }
+  clearError();
+});
 
-  // Checkbox ajustement
-  elCbAjust.addEventListener('change', () => {
-    elAjustWrapper.hidden = !elCbAjust.checked;
-    if (elCbAjust.checked) elAjustJours.focus();
-  });
+// --- Bouton signe +/- ---
+signBtn.addEventListener('click', () => {
+  const current = signBtn.dataset.sign;
+  const next = current === '+' ? '-' : '+';
+  signBtn.dataset.sign = next;
+  signBtn.textContent = next;
+});
 
-  // Boutons signe +/-
-  elBtnPlus.addEventListener('click', () => setSign(+1));
-  elBtnMinus.addEventListener('click', () => setSign(-1));
+// --- Compteur remarques ---
+remarques.addEventListener('input', () => {
+  const len = remarques.value.length;
+  charCounter.textContent = `${len}/30`;
+  charCounter.classList.toggle('warn', len >= 20 && len < 30);
+  charCounter.classList.toggle('full', len >= 30);
+});
 
-  // Compteur de caractères remarques
-  elRemarques.addEventListener('input', () => {
-    const len = elRemarques.value.length;
-    elCharCounter.textContent = `${len}/30`;
-    elCharCounter.classList.toggle('warn', len >= 28);
-  });
+// --- Nettoyer erreur sur interaction ---
+[typeActe, dateNotifInp, dureeAutreInp, adjustDays].forEach(el =>
+  el && el.addEventListener('input', clearError)
+);
 
-  // Bouton calculer
-  elBtnCalc.addEventListener('click', handleCalculer);
-
-  // Modal : fermeture
-  elModalClose.addEventListener('click', closeModal);
-  elModal.addEventListener('click', (e) => {
-    if (e.target === elModal) closeModal();
-  });
-
-  // Modal : actions
-  elBtnCal.addEventListener('click', exportCalendrier);
-  elBtnPdf.addEventListener('click', exportPDF);
-
-  // Fermeture modal avec Escape
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !elModal.hidden) closeModal();
-  });
+function clearError() {
+  errorMsg.hidden = true;
+  errorMsg.textContent = '';
 }
 
-function setSign(sign) {
-  ajustSign = sign;
-  elBtnPlus.setAttribute('aria-pressed', sign === +1 ? 'true' : 'false');
-  elBtnMinus.setAttribute('aria-pressed', sign === -1 ? 'true' : 'false');
+function showError(msg) {
+  errorMsg.textContent = msg;
+  errorMsg.hidden = false;
 }
 
-/* ─── VALIDATION ─── */
-function validate() {
-  let valid = true;
+// ═══════════════════════════════════════════════════════════════════════════
+// 7. SOUMISSION DU FORMULAIRE
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // Type d'acte
-  clearError(elTypeActe);
-  if (!elTypeActe.value) {
-    showError(elTypeActe, 'Veuillez sélectionner un type d\'acte.');
-    valid = false;
+form.addEventListener('submit', e => {
+  e.preventDefault();
+  clearError();
+
+  // — Validation —
+  if (!typeActe.value) { showError('Veuillez sélectionner un type d\'acte.'); return; }
+
+  let delaiJours = 0;
+  let typeLabel = '';
+
+  const labelMap = {
+    '10':             'Formation d\'Opposition',
+    '15':             'Réponse à Assignation',
+    '60_contestation':'Contestation de Décision',
+    '30':             'Déclaration d\'Appel',
+    '60_cassation':   'Pourvoi en Cassation',
+    '60_admin':       'Recours Administratif',
+    '90':             'Dépôt de Conclusions',
+    'autre':          'Autre',
+  };
+  typeLabel = labelMap[typeActe.value] || typeActe.value;
+
+  if (typeActe.value === 'autre') {
+    const v = parseInt(dureeAutreInp.value, 10);
+    if (!v || v < 1) { showError('Veuillez saisir un nombre de jours valide.'); return; }
+    delaiJours = v;
+  } else {
+    delaiJours = parseInt(typeActe.value, 10);
   }
 
-  // Durée si "Autre"
-  if (elTypeActe.value === 'autre:0') {
-    clearError(elDureeAutre);
-    const val = parseInt(elDureeAutre.value, 10);
-    if (!val || val < 1) {
-      showError(elDureeAutre, 'Entrez une durée valide (≥ 1 jour).');
-      valid = false;
-    }
-  }
-
-  // Date de notification
-  clearError(elDateNotif);
-  if (!elDateNotif.value) {
-    showError(elDateNotif, 'Veuillez saisir la date de notification.');
-    valid = false;
-  }
+  if (!dateNotifInp.value) { showError('Veuillez saisir la date de notification.'); return; }
+  const dateNotif = parseDateInput(dateNotifInp.value);
+  if (isNaN(dateNotif.getTime())) { showError('Date de notification invalide.'); return; }
 
   // Ajustement
-  if (elCbAjust.checked) {
-    clearError(elAjustJours);
-    const val = parseInt(elAjustJours.value, 10);
-    if (!val || val < 1) {
-      showError(elAjustJours, 'Entrez un nombre de jours valide (≥ 1).');
-      valid = false;
-    }
+  let adjustSign = signBtn.dataset.sign || '+';
+  let adjustVal  = 0;
+  if (adjustCheck.checked) {
+    const av = parseInt(adjustDays.value, 10);
+    if (isNaN(av) || av < 1) { showError('Veuillez saisir un nombre de jours pour l\'ajustement.'); return; }
+    adjustVal = adjustSign === '+' ? av : -av;
   }
 
-  return valid;
-}
+  const remarquesVal = remarques.value.trim();
 
-function showError(el, msg) {
-  el.classList.add('error');
-  const err = document.createElement('span');
-  err.className = 'error-msg';
-  err.textContent = msg;
-  err.setAttribute('role', 'alert');
-  el.parentNode.appendChild(err);
-}
+  // — Calcul —
+  const dateLimite = calculerDateLimite(dateNotif, delaiJours, adjustVal);
 
-function clearError(el) {
-  el.classList.remove('error');
-  const existing = el.parentNode.querySelector('.error-msg');
-  if (existing) existing.remove();
-}
-
-/* ─── CALCUL ─── */
-function handleCalculer() {
-  if (!validate()) return;
-
-  // Shimmer
-  elBtnCalc.classList.remove('shimmer');
-  void elBtnCalc.offsetWidth; // reflow
-  elBtnCalc.classList.add('shimmer');
-  setTimeout(() => elBtnCalc.classList.remove('shimmer'), 600);
-
-  const acteKey  = elTypeActe.value;
-  const acte     = ACTES[acteKey];
-  const delai    = acteKey === 'autre:0' ? parseInt(elDureeAutre.value, 10) : acte.jours;
-  const dateNotif = parseDate(elDateNotif.value);
-  const ajust    = elCbAjust.checked ? (ajustSign * parseInt(elAjustJours.value, 10)) : 0;
-  const remarques = elRemarques.value.trim();
-
-  const { deadline, reportee } = calculerDelai(dateNotif, delai, ajust);
-  currentDeadline = deadline;
-
-  // Stocker les données pour export
-  currentData = {
-    typeLabel:    acte.label,
-    delai,
-    isAutre:      acteKey === 'autre:0',
+  // — Sauvegarde résultat —
+  lastResult = {
+    dateLimite,
+    typeLabel,
+    delaiJours,
+    dureeAutreLabel: typeActe.value === 'autre' ? `${delaiJours} jours` : null,
     dateNotif,
-    ajust,
-    remarques,
-    reportee,
+    adjustVal,
+    adjustSign,
+    remarques: remarquesVal,
   };
 
-  afficherResultat();
-}
+  // — Shimmer effect —
+  btnCalculer.disabled = true;
+  btnCalculer.classList.add('shimmer');
+  setTimeout(() => {
+    btnCalculer.classList.remove('shimmer');
+    btnCalculer.disabled = false;
+    openModal();
+  }, 500);
+});
 
-/* ─── MODAL ─── */
-function afficherResultat() {
-  const { typeLabel, delai, isAutre, dateNotif, ajust, remarques, reportee } = currentData;
+// ═══════════════════════════════════════════════════════════════════════════
+// 8. MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+function openModal() {
+  const r = lastResult;
 
   // Date limite
-  let deadlineStr = formatDateFR(currentDeadline);
-  if (reportee) deadlineStr += ' *';
-  elModalDead.textContent = deadlineStr;
+  resultDate.textContent   = formatDateLong(r.dateLimite);
+  resultDayName.textContent = nomJour(r.dateLimite);
 
-  // Type d'acte
-  elResType.textContent = typeLabel;
+  // Liste détails
+  resultList.innerHTML = '';
 
-  // Durée spécifique (si Autre)
-  if (isAutre) {
-    elResDureeSpec.hidden = false;
-    elResDurVal.textContent = `${delai} jour${delai > 1 ? 's' : ''}`;
-  } else {
-    elResDureeSpec.hidden = true;
-  }
+  const rows = [
+    ['Type d\'acte',   r.typeLabel + (r.delaiJours && typeActe.value !== 'autre' ? ` — ${r.delaiJours} jours` : '')],
+    ...(r.dureeAutreLabel ? [['Durée spécifique', r.dureeAutreLabel]] : []),
+    ['Notification',   formatDateCourt(r.dateNotif)],
+    ...(r.adjustVal !== 0 ? [['Ajustement', `${r.adjustVal > 0 ? '+' : ''}${r.adjustVal} jours calendaires`]] : []),
+    ...(r.remarques ? [['Remarques', r.remarques]] : []),
+  ];
 
-  // Notification
-  elResNotif.textContent = formatDateFR(dateNotif);
+  rows.forEach(([label, value]) => {
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value;
+    resultList.appendChild(dt);
+    resultList.appendChild(dd);
+  });
 
-  // Ajustement
-  if (ajust !== 0) {
-    elResAjust.hidden = false;
-    const sign = ajust > 0 ? '+' : '';
-    elResAjustVal.textContent = `${sign}${ajust} jour${Math.abs(ajust) > 1 ? 's' : ''} (calendaires)`;
-  } else {
-    elResAjust.hidden = true;
-  }
+  modalOverlay.hidden = false;
+  document.body.style.overflow = 'hidden';
 
-  // Remarques
-  if (remarques) {
-    elResRem.hidden = false;
-    elResRemVal.textContent = remarques;
-  } else {
-    elResRem.hidden = true;
-  }
-
-  // Note report si weekend/férié
-  let note = elModal.querySelector('.modal-note');
-  if (reportee) {
-    if (!note) {
-      note = document.createElement('p');
-      note.className = 'modal-note';
-      note.style.cssText = 'font-size:0.72rem;color:#7c6fa0;text-align:center;padding:0.5rem 1.5rem 0;font-style:italic;';
-      elModal.querySelector('.modal-body').appendChild(note);
-    }
-    note.textContent = '* Date reportée au prochain jour ouvré.';
-  } else if (note) {
-    note.remove();
-  }
-
-  elModal.hidden = false;
-  elModalClose.focus();
+  // Focus piégé dans le modal
+  setTimeout(() => modalClose.focus(), 100);
 }
 
 function closeModal() {
-  elModal.hidden = true;
-  elBtnCalc.focus();
+  modalOverlay.hidden = true;
+  document.body.style.overflow = '';
+  btnCalculer.focus();
 }
 
-/* ─── EXPORT CALENDRIER (.ics) ─── */
-function exportCalendrier() {
-  const { typeLabel, remarques } = currentData;
-  const iso = toISO(currentDeadline).replace(/-/g, '');
-  const isoNext = toISO(new Date(currentDeadline.getTime() + 86400000)).replace(/-/g, '');
-  const stamp = new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15) + 'Z';
-  const desc = remarques ? stripEmojis(remarques) : '';
+modalClose.addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', e => {
+  if (e.target === modalOverlay) closeModal();
+});
+
+// Fermeture clavier
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !modalOverlay.hidden) closeModal();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 9. EXPORT CALENDRIER (iCal .ics)
+// ═══════════════════════════════════════════════════════════════════════════
+
+btnCal.addEventListener('click', () => {
+  const r = lastResult;
+  if (!r) return;
+
+  const uid  = `delai-${Date.now()}@delais-proceduraux`;
+  const now  = iCalDate(new Date());
+  const dl   = iCalDate(r.dateLimite);
+  const summary = `Délai : ${stripEmojis(r.typeLabel)}`;
+  const desc  = [
+    `Type : ${stripEmojis(r.typeLabel)}`,
+    `Notification : ${formatDateCourt(r.dateNotif)}`,
+    r.adjustVal !== 0 ? `Ajustement : ${r.adjustVal > 0 ? '+' : ''}${r.adjustVal} j` : '',
+    r.remarques ? `Remarques : ${stripEmojis(r.remarques)}` : '',
+  ].filter(Boolean).join('\\n');
 
   const ics = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Délais Procéduraux//FR',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
+    'PRODID:-//Délais procéduraux//FR',
     'BEGIN:VEVENT',
-    `UID:delai-${stamp}@delais-proceduraux`,
-    `DTSTAMP:${stamp}`,
-    `DTSTART;VALUE=DATE:${iso}`,
-    `DTEND;VALUE=DATE:${isoNext}`,
-    `SUMMARY:⚖️ Délai : ${stripEmojis(typeLabel)}`,
-    desc ? `DESCRIPTION:${desc}` : '',
+    `UID:${uid}`,
+    `DTSTAMP:${now}T000000Z`,
+    `DTSTART;VALUE=DATE:${dl}`,
+    `DTEND;VALUE=DATE:${dl}`,
+    `SUMMARY:${summary}`,
+    `DESCRIPTION:${desc}`,
     'BEGIN:VALARM',
     'TRIGGER:-P1D',
     'ACTION:DISPLAY',
-    `DESCRIPTION:Rappel délai : ${stripEmojis(typeLabel)}`,
+    `DESCRIPTION:Rappel : ${summary}`,
     'END:VALARM',
     'END:VEVENT',
     'END:VCALENDAR',
-  ].filter(Boolean).join('\r\n');
+  ].join('\r\n');
 
   const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url;
-  a.download = `delai-${toISO(currentDeadline)}.ics`;
+  a.href     = url;
+  a.download = `delai_${r.typeLabel.replace(/\s+/g, '_').toLowerCase()}.ics`;
   a.click();
   URL.revokeObjectURL(url);
-  showToast('Fichier calendrier généré ✓');
-}
+});
 
-/* ─── EXPORT PDF ─── */
-function exportPDF() {
-  if (!window.jspdf) {
-    showToast('jsPDF non disponible — vérifiez la connexion.');
-    return;
-  }
+// ═══════════════════════════════════════════════════════════════════════════
+// 10. GÉNÉRATION PDF (jsPDF)
+// ═══════════════════════════════════════════════════════════════════════════
+
+btnPdf.addEventListener('click', () => {
+  const r = lastResult;
+  if (!r || !window.jspdf) return;
 
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  const { typeLabel, delai, isAutre, dateNotif, ajust, remarques } = currentData;
+  const W = 210, M = 16, CW = W - 2 * M;
 
-  const marginX = 20;
-  const pageW   = 210;
-  const contentW = pageW - marginX * 2;
-
-  // ── Header violet ──
-  doc.setFillColor(55, 48, 163);       // violet-700
-  doc.rect(0, 0, pageW, 38, 'F');
-  doc.setFillColor(29, 78, 216);       // blue accent
-  doc.rect(0, 34, pageW, 4, 'F');
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(18);
+  // ── En-tête coloré dégradé ──────────────────────────────────────────────
+  // Fond violet
+  doc.setFillColor(75, 46, 154);
+  doc.rect(0, 0, W, 42, 'F');
+  // Accent bleu
+  doc.setFillColor(30, 95, 173);
+  doc.rect(W * 0.55, 0, W * 0.45, 42, 'F');
+  // Titre
   doc.setFont('helvetica', 'bold');
-  doc.text('DÉLAIS PROCÉDURAUX', pageW / 2, 16, { align: 'center' });
-
+  doc.setFontSize(18);
+  doc.setTextColor(255, 255, 255);
+  doc.text('Délais procéduraux', M, 20);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('Calculateur procédural — France métropolitaine', pageW / 2, 24, { align: 'center' });
+  doc.setTextColor(200, 185, 240);
+  doc.text('Calculateur de délais procéduraux — Usage professionnel', M, 28);
 
-  const genDate = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' });
-  doc.text(`Généré le ${genDate}`, pageW / 2, 31, { align: 'center' });
+  // Date de génération (coin droit)
+  const today = formatDateCourt(new Date());
+  doc.setFontSize(8);
+  doc.setTextColor(200, 200, 240);
+  doc.text(`Généré le ${today}`, W - M, 28, { align: 'right' });
 
-  // ── Date limite — encart coloré ──
-  doc.setFillColor(238, 242, 255);     // violet-50
-  doc.roundedRect(marginX, 44, contentW, 22, 3, 3, 'F');
-  doc.setDrawColor(99, 102, 241);
+  // ── Date limite — bloc proéminent ───────────────────────────────────────
+  const dlY = 50;
+  doc.setFillColor(248, 244, 255);
+  doc.roundedRect(M, dlY - 4, CW, 22, 3, 3, 'F');
+  doc.setDrawColor(124, 79, 255);
   doc.setLineWidth(0.5);
-  doc.roundedRect(marginX, 44, contentW, 22, 3, 3, 'S');
+  doc.roundedRect(M, dlY - 4, CW, 22, 3, 3, 'D');
 
-  doc.setTextColor(55, 48, 163);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
-  doc.text('DATE LIMITE', pageW / 2, 51, { align: 'center' });
+  doc.setTextColor(124, 79, 255);
+  doc.text('DATE LIMITE', M + 6, dlY + 4);
 
-  doc.setFontSize(15);
+  doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 27, 75);
-  doc.text(stripEmojis(formatDateFR(currentDeadline)), pageW / 2, 61, { align: 'center' });
+  doc.setTextColor(30, 15, 60);
+  doc.text(formatDateLong(r.dateLimite).toUpperCase(), M + 6, dlY + 14);
 
-  // ── Lignes de détail ──
-  let y = 76;
-  const rows = [
-    { label: 'TYPE D\'ACTE',                  value: stripEmojis(typeLabel) },
-    isAutre ? { label: 'DURÉE SPÉCIFIQUE',    value: `${delai} jour${delai > 1 ? 's' : ''}` } : null,
-    { label: 'DATE DE NOTIFICATION',          value: stripEmojis(formatDateFR(dateNotif)) },
-    ajust !== 0 ? { label: 'AJUSTEMENT',      value: `${ajust > 0 ? '+' : ''}${ajust} jour${Math.abs(ajust) > 1 ? 's' : ''} calendaires` } : null,
-    remarques   ? { label: 'REMARQUES',       value: stripEmojis(remarques) } : null,
-  ].filter(Boolean);
+  // ── Détails ─────────────────────────────────────────────────────────────
+  let y = 82;
 
-  rows.forEach((row, i) => {
-    if (i % 2 === 0) {
-      doc.setFillColor(245, 245, 245);
-      doc.rect(marginX, y - 5, contentW, 11, 'F');
-    }
+  const fields = [
+    ['TYPE D\'ACTE',         stripEmojis(r.typeLabel)],
+    ...(r.dureeAutreLabel ? [['DURÉE SPÉCIFIQUE',   r.dureeAutreLabel]] : []),
+    ['NOTIFICATION',         formatDateLong(r.dateNotif)],
+    ...(r.adjustVal !== 0   ? [['AUGMENTATION / DIMINUTION', `${r.adjustVal > 0 ? '+' : ''}${r.adjustVal} jours calendaires`]] : []),
+    ...(r.remarques         ? [['REMARQUES',         stripEmojis(r.remarques)]] : []),
+  ];
 
-    doc.setTextColor(100, 110, 150);
-    doc.setFontSize(7.5);
+  fields.forEach(([label, value]) => {
+    // Fond alternant
+    doc.setFillColor(249, 247, 255);
+    doc.rect(M, y - 4, CW, 14, 'F');
+    doc.setDrawColor(220, 215, 235);
+    doc.setLineWidth(0.3);
+    doc.rect(M, y - 4, CW, 14, 'D');
+    // Barre latérale
+    doc.setFillColor(124, 79, 255);
+    doc.rect(M, y - 4, 2, 14, 'F');
+
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
-    doc.text(row.label, marginX + 4, y);
+    doc.setTextColor(124, 79, 255);
+    doc.text(label, M + 6, y + 2);
 
-    doc.setTextColor(30, 27, 75);
-    doc.setFontSize(9.5);
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(row.value, marginX + 4, y + 5.5);
+    doc.setTextColor(30, 20, 50);
+    doc.text(value, M + 6, y + 8);
 
-    y += 13;
+    y += 18;
   });
 
-  // ── Footer ──
-  doc.setFillColor(245, 245, 250);
-  doc.rect(0, 275, pageW, 22, 'F');
-  doc.setTextColor(150, 150, 180);
+  // ── Pied de page ────────────────────────────────────────────────────────
   doc.setFontSize(7);
-  doc.setFont('helvetica', 'italic');
-  doc.text('Délais calculés selon le Code de procédure civile et le CJA. Jours fériés France métropolitaine.', pageW / 2, 283, { align: 'center' });
-  doc.text('Ce document est fourni à titre indicatif. Vérifiez toujours les délais avec un professionnel du droit.', pageW / 2, 289, { align: 'center' });
+  doc.setTextColor(160, 155, 180);
+  doc.text('Ce document a été généré automatiquement par Délais procéduraux.', M, 285);
+  doc.text('Il ne constitue pas un conseil juridique.', M, 290);
+  doc.text(`Page 1/1  |  ${today}`, W - M, 290, { align: 'right' });
 
-  const filename = `delai-${toISO(currentDeadline)}.pdf`;
-  doc.save(filename);
-  showToast('PDF généré ✓');
-}
+  // Ligne séparatrice pied
+  doc.setDrawColor(220, 215, 235);
+  doc.setLineWidth(0.3);
+  doc.line(M, 282, W - M, 282);
 
-/* ─── TOAST ─── */
-let toastTimer = null;
-function showToast(msg, duration = 2500) {
-  elToast.textContent = msg;
-  elToast.hidden = false;
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => elToast.classList.add('show'));
-  });
-  if (toastTimer) clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    elToast.classList.remove('show');
-    setTimeout(() => { elToast.hidden = true; }, 350);
-  }, duration);
-}
+  // ── Téléchargement ──────────────────────────────────────────────────────
+  const fname = `delai_${stripEmojis(r.typeLabel).replace(/\s+/g,'_').toLowerCase()}_${today.replace(/\//g,'-')}.pdf`;
+  doc.save(fname);
+});
 
-/* ─── SERVICE WORKER ─── */
+// ═══════════════════════════════════════════════════════════════════════════
+// 11. SERVICE WORKER
+// ═══════════════════════════════════════════════════════════════════════════
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('./service-worker.js')
+    navigator.serviceWorker.register('service-worker.js')
       .then(reg => {
-        // Vérifier les mises à jour toutes les 60 secondes
-        setInterval(() => reg.update(), 60000);
+        // Mise à jour silencieuse
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // Nouveau contenu disponible — activation automatique
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
       })
-      .catch(err => console.warn('SW registration failed:', err));
+      .catch(err => console.warn('[SW] Erreur d\'enregistrement :', err));
+
+    // Rechargement si le SW prend le contrôle
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) { refreshing = true; window.location.reload(); }
+    });
   });
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 12. INIT — date max = aujourd'hui
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function init() {
+  const today = new Date();
+  const yyyy  = today.getFullYear();
+  const mm    = String(today.getMonth() + 1).padStart(2, '0');
+  const dd    = String(today.getDate()).padStart(2, '0');
+  dateNotifInp.max = `${yyyy}-${mm}-${dd}`;
+})();

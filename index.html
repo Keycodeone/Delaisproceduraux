@@ -3,153 +3,136 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#3730a3" />
-  <meta name="description" content="Calculateur de délais procéduraux pour avocats" />
+  <meta name="description" content="Calculateur de délais procéduraux pour avocats — rapide, fiable, offline." />
+  <meta name="theme-color" content="#120D2E" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Délais" />
   <link rel="manifest" href="webmanifest.json" />
   <link rel="apple-touch-icon" href="icons/icon_192px.png" />
-  <link rel="icon" type="image/png" href="icons/icon_192px.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon_192px.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <title>Délais Procéduraux</title>
+  <title>Délais procéduraux</title>
 </head>
 <body>
+  <div class="app-shell">
 
-  <!-- ===== HEADER ===== -->
-  <header class="app-header">
-    <div class="header-inner">
-      <img src="icons/balance_50px.png" alt="" class="header-icon" aria-hidden="true" />
-      <h1 class="header-title">Délais Procéduraux</h1>
-      <img src="icons/balance_50px.png" alt="" class="header-icon" aria-hidden="true" />
-    </div>
-  </header>
-
-  <!-- ===== MAIN FORM ===== -->
-  <main class="main-content">
-    <div class="form-card" role="main">
-
-      <!-- Type d'acte -->
-      <div class="field-group">
-        <label class="field-label" for="type-acte">Type d'acte</label>
-        <div class="select-wrapper">
-          <select id="type-acte" class="field-input" aria-required="true">
-            <option value="" disabled selected>Sélectionner un type d'acte…</option>
-            <option value="opposition:10">Formation d'Opposition (10 jours)</option>
-            <option value="assignation:15">Réponse à Assignation (15 jours)</option>
-            <option value="contestation:60">Contestation de Décision (60 jours)</option>
-            <option value="appel:30">Déclaration d'Appel (30 jours)</option>
-            <option value="cassation:60">Pourvoi en Cassation (60 jours)</option>
-            <option value="administratif:60">Recours Administratif (60 jours)</option>
-            <option value="conclusions:90">Dépôt de Conclusions (90 jours)</option>
-            <option value="autre:0">Autre (saisir la durée ci-dessous)</option>
-          </select>
-          <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-        </div>
+    <!-- HEADER -->
+    <header class="app-header">
+      <img src="icons/balance_50px.png" alt="" class="header-icon" width="32" height="32" />
+      <div class="header-text">
+        <h1 class="app-title">Délais procéduraux</h1>
       </div>
+      <img src="icons/balance_50px.png" alt="" class="header-icon" width="32" height="32" />
+    </header>
 
-      <!-- Durée personnalisée (visible si "Autre") -->
-      <div class="field-group" id="group-autre" hidden>
-        <label class="field-label" for="duree-autre">Durée spécifique (jours)</label>
-        <input type="number" id="duree-autre" class="field-input" placeholder="Ex : 45" min="1" max="999" aria-describedby="duree-autre-hint" />
-        <span class="field-hint" id="duree-autre-hint">Entrez le nombre de jours du délai</span>
-      </div>
+    <!-- FORM -->
+    <main class="form-wrapper">
+      <form id="delaiForm" novalidate>
 
-      <!-- Date de notification -->
-      <div class="field-group">
-        <label class="field-label" for="date-notif">Date de notification</label>
-        <input type="date" id="date-notif" class="field-input field-date" aria-required="true" />
-      </div>
-
-      <!-- Augmentation / Diminution -->
-      <div class="field-group">
-        <div class="checkbox-row">
-          <input type="checkbox" id="cb-ajust" class="checkbox-input" role="switch" />
-          <label class="checkbox-label" for="cb-ajust">Augmentation ou Diminution du délai</label>
-        </div>
-        <div class="ajust-wrapper" id="ajust-wrapper" hidden>
-          <div class="ajust-sign-group">
-            <button type="button" class="sign-btn" id="btn-sign-plus" aria-pressed="true" aria-label="Augmentation">+</button>
-            <button type="button" class="sign-btn sign-btn--minus" id="btn-sign-minus" aria-pressed="false" aria-label="Diminution">−</button>
+        <!-- TYPE D'ACTE -->
+        <div class="field-group">
+          <label class="field-label" for="typeActe">Type d'acte</label>
+          <div class="select-wrapper">
+            <select id="typeActe" name="typeActe" required>
+              <option value="" disabled selected>Sélectionner…</option>
+              <option value="10">Formation d'Opposition (10 jours)</option>
+              <option value="15">Réponse à Assignation (15 jours)</option>
+              <option value="60_contestation">Contestation de Décision (60 jours)</option>
+              <option value="30">Déclaration d'Appel (30 jours)</option>
+              <option value="60_cassation">Pourvoi en Cassation (60 jours)</option>
+              <option value="60_admin">Recours Administratif (60 jours)</option>
+              <option value="90">Dépôt de Conclusions (90 jours)</option>
+              <option value="autre">Autre (saisir la durée ci-dessous)</option>
+            </select>
+            <span class="select-arrow">&#8964;</span>
           </div>
-          <input type="number" id="ajust-jours" class="field-input ajust-input" placeholder="Jours" min="1" max="999" aria-label="Nombre de jours d'ajustement" />
-          <span class="ajust-unit">jours cal.</span>
+          <div class="subfield" id="dureeAutreWrapper" hidden>
+            <input type="number" id="dureeAutre" name="dureeAutre" min="1" max="3650"
+              placeholder="Nombre de jours" class="input-field" />
+          </div>
         </div>
-      </div>
 
-      <!-- Remarques -->
-      <div class="field-group">
-        <label class="field-label" for="remarques">
-          Remarques éventuelles
-          <span class="char-counter" id="char-counter" aria-live="polite">0/30</span>
-        </label>
-        <textarea id="remarques" class="field-input field-textarea" placeholder="Notes ou observations…" maxlength="30" rows="2" aria-describedby="char-counter"></textarea>
-      </div>
+        <!-- DATE DE NOTIFICATION -->
+        <div class="field-group">
+          <label class="field-label" for="dateNotif">Date de notification</label>
+          <input type="date" id="dateNotif" name="dateNotif" required class="input-field date-field" />
+        </div>
 
-      <!-- Bouton calculer -->
-      <button type="button" id="btn-calculer" class="btn-primary" aria-label="Calculer le délai">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="12" y2="14"/></svg>
-        Calculer
-      </button>
+        <!-- AJUSTEMENT -->
+        <div class="field-group">
+          <label class="field-label adjust-label">
+            <span class="checkbox-wrapper">
+              <input type="checkbox" id="adjustCheck" name="adjustCheck" />
+              <span class="custom-checkbox"></span>
+            </span>
+            Augmentation ou Diminution du délai
+          </label>
+          <div class="subfield adjust-field" id="adjustWrapper" hidden>
+            <div class="signed-input">
+              <button type="button" class="sign-btn" id="signBtn" data-sign="+" aria-label="Changer le signe">+</button>
+              <input type="number" id="adjustDays" name="adjustDays" min="1" max="3650"
+                placeholder="Jours" class="input-field" />
+            </div>
+            <span class="adjust-hint">jours calendaires</span>
+          </div>
+        </div>
 
-    </div>
-  </main>
+        <!-- REMARQUES -->
+        <div class="field-group">
+          <label class="field-label" for="remarques">
+            Remarques éventuelles
+            <span class="char-counter" id="charCounter">0/30</span>
+          </label>
+          <textarea id="remarques" name="remarques" maxlength="30"
+            placeholder="Référence dossier, notes…" class="input-field textarea-field" rows="2"></textarea>
+        </div>
 
-  <!-- ===== MODAL RÉSULTATS ===== -->
-  <div id="modal-overlay" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+        <!-- SUBMIT -->
+        <button type="submit" class="btn-calculer" id="btnCalculer">
+          <span class="btn-text">Calculer</span>
+          <span class="btn-shimmer"></span>
+        </button>
+
+      </form>
+
+      <!-- VALIDATION MESSAGES -->
+      <div class="error-msg" id="errorMsg" hidden role="alert"></div>
+    </main>
+
+  </div><!-- /.app-shell -->
+
+  <!-- MODAL RÉSULTATS -->
+  <div class="modal-overlay" id="modalOverlay" hidden aria-modal="true" role="dialog" aria-labelledby="modalTitle">
     <div class="modal-card">
-      <button class="modal-close" id="btn-modal-close" aria-label="Fermer">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <button class="modal-close" id="modalClose" aria-label="Fermer">&#x2715;</button>
 
       <div class="modal-header">
-        <div class="modal-badge">Date limite</div>
-        <p id="modal-title" class="modal-deadline" aria-live="polite"></p>
+        <p class="modal-eyebrow">Date limite calculée</p>
+        <p class="modal-date" id="resultDate">—</p>
+        <p class="modal-dayname" id="resultDayName">—</p>
       </div>
 
       <div class="modal-body">
-        <div class="result-row" id="res-type">
-          <span class="res-label">Type d'acte</span>
-          <span class="res-value" id="res-type-val"></span>
-        </div>
-        <div class="result-row" id="res-duree-spec" hidden>
-          <span class="res-label">Durée spécifique</span>
-          <span class="res-value" id="res-duree-spec-val"></span>
-        </div>
-        <div class="result-row">
-          <span class="res-label">Notification</span>
-          <span class="res-value" id="res-notif-val"></span>
-        </div>
-        <div class="result-row" id="res-ajust" hidden>
-          <span class="res-label">Ajustement</span>
-          <span class="res-value" id="res-ajust-val"></span>
-        </div>
-        <div class="result-row" id="res-remarques" hidden>
-          <span class="res-label">Remarques</span>
-          <span class="res-value" id="res-remarques-val"></span>
-        </div>
+        <dl class="result-list" id="resultList"></dl>
       </div>
 
       <div class="modal-actions">
-        <button type="button" id="btn-calendrier" class="btn-action btn-action--cal" aria-label="Ajouter au calendrier">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <button class="btn-action btn-cal" id="btnCal">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           Calendrier
         </button>
-        <button type="button" id="btn-pdf" class="btn-action btn-action--pdf" aria-label="Exporter en PDF">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-          Exporter PDF
+        <button class="btn-action btn-pdf" id="btnPdf">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          Télécharger PDF
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Toast notification -->
-  <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
-
-  <!-- jsPDF CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
